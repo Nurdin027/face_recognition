@@ -1,18 +1,19 @@
+import argparse
+import os
+import time
+from datetime import datetime
+
+import cv2
+import numpy as np
+import tensorflow as tf
+from scipy import misc
 from sklearn.metrics.pairwise import pairwise_distances
 from tensorflow.python.platform import gfile
-from scipy import misc
-import tensorflow as tf
-import numpy as np
+
 import detect_and_align
-import argparse
-import time
-import cv2
-import os
-import urllib
 
 
-class IdData():
-    """Keeps track of known identities and calculates id matches"""
+class IdData:
 
     def __init__(self, id_folder, mtcnn, sess, embeddings, images_placeholder,
                  phase_train_placeholder, distance_treshold):
@@ -91,13 +92,6 @@ def load_model(model):
     else:
         raise ValueError('Specify model file, not directory!')
 
-def thing():
-    nyala = ('http://jatayu.io/api/data/646ce982-de9b-11e9-8801-e4066d151e57/v1?value=1')
-    req1 = urllib.request.Request(nyala)
-    response1 = urllib.request.urlopen(req1)
-    print("Membuka pintu")
-    
-thingspeak = False
 
 def main(args):
     with tf.Graph().as_default():
@@ -112,7 +106,8 @@ def main(args):
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
             # Load anchor IDs
-            id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder, phase_train_placeholder, args.threshold)
+            id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder, phase_train_placeholder,
+                             args.threshold)
 
             cap = cv2.VideoCapture(0)
             frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -121,7 +116,10 @@ def main(args):
             show_bb = False
             show_id = True
             show_fps = False
-            while(True):
+            now = datetime.now()
+            detik = 100
+            warna = (55, 255, 0)
+            while True:
                 start = time.time()
                 _, frame = cap.read()
 
@@ -136,19 +134,25 @@ def main(args):
                     print('Matches in frame:')
                     matching_ids, matching_distances = id_data.find_matching_ids(embs)
 
-                    for bb, landmark, matching_id, dist in zip(padded_bounding_boxes, landmarks, matching_ids, matching_distances):
+                    for bb, landmark, matching_id, dist in zip(padded_bounding_boxes, landmarks, matching_ids,
+                                                               matching_distances):
                         if matching_id is None:
                             matching_id = 'Unknown'
                             print('Unknown! Couldn\'t fint match.')
+                            warna = (0, 0, 255)
+                            return_value, image = cap.read()
+                            if True:
+                                cv2.imwrite('unknown/{}.jpeg'.format(now.strftime('%H%M%S')), image)
+                                print('Saving image')
+                                detik = now.second
                         else:
                             print('Hi %s! Distance: %1.4f' % (matching_id, dist))
-                            global thingspeak
-                            thingspeak = True
+                            warna = (55, 255, 0)
                         if show_id:
                             font = cv2.FONT_HERSHEY_SIMPLEX
-                            cv2.putText(frame, matching_id, (bb[0], bb[3]), font, 1, (255, 0, 0), 1, cv2.LINE_AA)
+                            cv2.putText(frame, matching_id, (bb[0], bb[3]), font, 1, warna, 1, cv2.LINE_AA)
                         if show_bb:
-                            cv2.rectangle(frame, (bb[0], bb[1]), (bb[2], bb[3]), (255, 0, 0), 2)
+                            cv2.rectangle(frame, (bb[0], bb[1]), (bb[2], bb[3]), warna, 2)
                         if show_landmarks:
                             for j in range(5):
                                 size = 1
@@ -157,10 +161,6 @@ def main(args):
                                 cv2.rectangle(frame, top_left, bottom_right, (255, 0, 255), 2)
                 else:
                     print('Couldn\'t find a face')
-
-                    if (thingspeak):
-                        thing()
-                        thingspeak = False
 
                 end = time.time()
 

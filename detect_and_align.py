@@ -1,9 +1,10 @@
-from six import string_types, iteritems
-from scipy import misc
-import tensorflow as tf
-import numpy as np
-import cv2
 import os
+
+import cv2
+import numpy as np
+import tensorflow as tf
+from scipy import misc
+from six import string_types, iteritems
 
 
 def detect_faces(img, mtcnn):
@@ -347,64 +348,64 @@ class Network(object):
 class PNet(Network):
     def setup(self):
         (self.feed('data')
-             .conv(3, 3, 10, 1, 1, padding='VALID', relu=False, name='conv1')
-             .prelu(name='PReLU1')
-             .max_pool(2, 2, 2, 2, name='pool1')
-             .conv(3, 3, 16, 1, 1, padding='VALID', relu=False, name='conv2')
-             .prelu(name='PReLU2')
-             .conv(3, 3, 32, 1, 1, padding='VALID', relu=False, name='conv3')
-             .prelu(name='PReLU3')
-             .conv(1, 1, 2, 1, 1, relu=False, name='conv4-1')
-             .softmax(3, name='prob1'))
+         .conv(3, 3, 10, 1, 1, padding='VALID', relu=False, name='conv1')
+         .prelu(name='PReLU1')
+         .max_pool(2, 2, 2, 2, name='pool1')
+         .conv(3, 3, 16, 1, 1, padding='VALID', relu=False, name='conv2')
+         .prelu(name='PReLU2')
+         .conv(3, 3, 32, 1, 1, padding='VALID', relu=False, name='conv3')
+         .prelu(name='PReLU3')
+         .conv(1, 1, 2, 1, 1, relu=False, name='conv4-1')
+         .softmax(3, name='prob1'))
 
         (self.feed('PReLU3')
-             .conv(1, 1, 4, 1, 1, relu=False, name='conv4-2'))
+         .conv(1, 1, 4, 1, 1, relu=False, name='conv4-2'))
 
 
 class RNet(Network):
     def setup(self):
         (self.feed('data')
-             .conv(3, 3, 28, 1, 1, padding='VALID', relu=False, name='conv1')
-             .prelu(name='prelu1')
-             .max_pool(3, 3, 2, 2, name='pool1')
-             .conv(3, 3, 48, 1, 1, padding='VALID', relu=False, name='conv2')
-             .prelu(name='prelu2')
-             .max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
-             .conv(2, 2, 64, 1, 1, padding='VALID', relu=False, name='conv3')
-             .prelu(name='prelu3')
-             .fc(128, relu=False, name='conv4')
-             .prelu(name='prelu4')
-             .fc(2, relu=False, name='conv5-1')
-             .softmax(1, name='prob1'))
+         .conv(3, 3, 28, 1, 1, padding='VALID', relu=False, name='conv1')
+         .prelu(name='prelu1')
+         .max_pool(3, 3, 2, 2, name='pool1')
+         .conv(3, 3, 48, 1, 1, padding='VALID', relu=False, name='conv2')
+         .prelu(name='prelu2')
+         .max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
+         .conv(2, 2, 64, 1, 1, padding='VALID', relu=False, name='conv3')
+         .prelu(name='prelu3')
+         .fc(128, relu=False, name='conv4')
+         .prelu(name='prelu4')
+         .fc(2, relu=False, name='conv5-1')
+         .softmax(1, name='prob1'))
 
         (self.feed('prelu4')
-             .fc(4, relu=False, name='conv5-2'))
+         .fc(4, relu=False, name='conv5-2'))
 
 
 class ONet(Network):
     def setup(self):
         (self.feed('data')
-             .conv(3, 3, 32, 1, 1, padding='VALID', relu=False, name='conv1')
-             .prelu(name='prelu1')
-             .max_pool(3, 3, 2, 2, name='pool1')
-             .conv(3, 3, 64, 1, 1, padding='VALID', relu=False, name='conv2')
-             .prelu(name='prelu2')
-             .max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
-             .conv(3, 3, 64, 1, 1, padding='VALID', relu=False, name='conv3')
-             .prelu(name='prelu3')
-             .max_pool(2, 2, 2, 2, name='pool3')
-             .conv(2, 2, 128, 1, 1, padding='VALID', relu=False, name='conv4')
-             .prelu(name='prelu4')
-             .fc(256, relu=False, name='conv5')
-             .prelu(name='prelu5')
-             .fc(2, relu=False, name='conv6-1')
-             .softmax(1, name='prob1'))
+         .conv(3, 3, 32, 1, 1, padding='VALID', relu=False, name='conv1')
+         .prelu(name='prelu1')
+         .max_pool(3, 3, 2, 2, name='pool1')
+         .conv(3, 3, 64, 1, 1, padding='VALID', relu=False, name='conv2')
+         .prelu(name='prelu2')
+         .max_pool(3, 3, 2, 2, padding='VALID', name='pool2')
+         .conv(3, 3, 64, 1, 1, padding='VALID', relu=False, name='conv3')
+         .prelu(name='prelu3')
+         .max_pool(2, 2, 2, 2, name='pool3')
+         .conv(2, 2, 128, 1, 1, padding='VALID', relu=False, name='conv4')
+         .prelu(name='prelu4')
+         .fc(256, relu=False, name='conv5')
+         .prelu(name='prelu5')
+         .fc(2, relu=False, name='conv6-1')
+         .softmax(1, name='prob1'))
 
         (self.feed('prelu5')
-             .fc(4, relu=False, name='conv6-2'))
+         .fc(4, relu=False, name='conv6-2'))
 
         (self.feed('prelu5')
-             .fc(10, relu=False, name='conv6-3'))
+         .fc(10, relu=False, name='conv6-3'))
 
 
 def create_mtcnn(sess, model_path):
@@ -431,13 +432,13 @@ def create_mtcnn(sess, model_path):
         return sess.run(('rnet/conv5-2/conv5-2:0', 'rnet/prob1:0'), feed_dict={'rnet/input:0': img})
 
     def onet_fun(img):
-        return sess.run(('onet/conv6-2/conv6-2:0', 'onet/conv6-3/conv6-3:0', 'onet/prob1:0'), feed_dict={'onet/input:0': img})
+        return sess.run(('onet/conv6-2/conv6-2:0', 'onet/conv6-3/conv6-3:0', 'onet/prob1:0'),
+                        feed_dict={'onet/input:0': img})
 
     return {'pnet': pnet_fun, 'rnet': rnet_fun, 'onet': onet_fun}
 
 
 def detect_face(img, pnet, rnet, onet):
-
     minsize = 20  # minimum size of face
     threshold = [0.6, 0.7, 0.7]  # three steps's threshold
     factor = 0.709  # scale factor
