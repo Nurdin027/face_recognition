@@ -113,11 +113,9 @@ def main(args):
             frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
             show_landmarks = False
-            show_bb = False
+            show_bb = True
             show_id = True
             show_fps = False
-            now = datetime.now()
-            detik = 100
             warna = (55, 255, 0)
             while True:
                 start = time.time()
@@ -141,10 +139,8 @@ def main(args):
                             print('Unknown! Couldn\'t fint match.')
                             warna = (0, 0, 255)
                             return_value, image = cap.read()
-                            if True:
-                                cv2.imwrite('unknown/{}.jpeg'.format(now.strftime('%H%M%S')), image)
-                                print('Saving image')
-                                detik = now.second
+                            cv2.imwrite('unknown/{}.jpeg'.format(datetime.now().strftime('%H%M%S')), image)
+                            print('Saving image')
                         else:
                             print('Hi %s! Distance: %1.4f' % (matching_id, dist))
                             warna = (55, 255, 0)
