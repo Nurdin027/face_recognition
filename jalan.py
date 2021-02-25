@@ -1,6 +1,5 @@
 import argparse
 import os
-import time
 from datetime import datetime
 
 import cv2
@@ -109,14 +108,8 @@ def main(args, channel=0):
                              args.threshold)
 
             cap = cv2.VideoCapture(channel)
-            frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-            show_landmarks = False
-            show_bb = False
-            show_id = True
-            show_fps = False
             while 1:
-                start = time.time()
                 _, frame = cap.read()
 
                 face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame, mtcnn)
@@ -131,49 +124,17 @@ def main(args, channel=0):
                     for bb, landmark, matching_id, dist in zip(padded_bounding_boxes, landmarks, matching_ids,
                                                                matching_distances):
                         if matching_id is None:
-                            matching_id = 'Unknown'
                             print('Unknown! Couldn\'t fint match.')
-                            warna = (0, 0, 255)
-                            cv2.imwrite('unknown/{}.jpeg'.format(datetime.now().strftime('%d%m%Y_%H%M%S')), frame)
+                            cv2.imwrite('unknown/unknown/{}.jpeg'.format(datetime.now().strftime('%d%m%Y_%H%M%S')),
+                                        frame)
                         else:
                             print('Hi %s! Distance: %1.4f' % (matching_id, dist))
-                            warna = (55, 255, 0)
-                        if show_id:
-                            font = cv2.FONT_HERSHEY_SIMPLEX
-                            cv2.putText(frame, matching_id, (bb[0], bb[3]), font, 1, warna, 1, cv2.LINE_AA)
-                        if show_bb:
-                            cv2.rectangle(frame, (bb[0], bb[1]), (bb[2], bb[3]), warna, 2)
-                        if show_landmarks:
-                            for j in range(5):
-                                size = 1
-                                top_left = (int(landmark[j]) - size, int(landmark[j + 5]) - size)
-                                bottom_right = (int(landmark[j]) + size, int(landmark[j + 5]) + size)
-                                cv2.rectangle(frame, top_left, bottom_right, (255, 0, 255), 2)
                 else:
                     print('Couldn\'t find a face')
-
-                end = time.time()
-
-                seconds = end - start
-                fps = round(1 / seconds, 2)
-
-                if show_fps:
-                    font = cv2.FONT_HERSHEY_SIMPLEX
-                    cv2.putText(frame, str(fps), (0, int(frame_height) - 5), font, 1, (255, 255, 255), 1, cv2.LINE_AA)
-
-                cv2.imshow("INFRA", frame)
 
                 key = cv2.waitKey(1)
                 if key == ord('q'):
                     break
-                elif key == ord('l'):
-                    show_landmarks = not show_landmarks  # titik
-                elif key == ord('b'):
-                    show_bb = not show_bb  # frame box
-                elif key == ord('i'):
-                    show_id = not show_id  # nama(id)
-                elif key == ord('f'):
-                    show_fps = not show_fps
 
             cap.release()
             cv2.destroyAllWindows()
