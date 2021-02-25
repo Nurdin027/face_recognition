@@ -6,6 +6,9 @@ import tensorflow as tf
 from scipy import misc
 from six import string_types, iteritems
 
+tf = tf.compat.v1
+tf.disable_v2_behavior()
+
 
 def detect_faces(img, mtcnn):
     margin = 44
@@ -338,10 +341,10 @@ class Network(object):
 
     @layer
     def softmax(self, target, axis, name=None):
-        max_axis = tf.reduce_max(target, axis, keep_dims=True)
+        max_axis = tf.reduce_max(target, axis, keepdims=True)
         target_exp = tf.exp(target - max_axis)
-        normalize = tf.reduce_sum(target_exp, axis, keep_dims=True)
-        softmax = tf.div(target_exp, normalize, name)
+        normalize = tf.reduce_sum(target_exp, axis, keepdims=True)
+        softmax = tf.math.divide(target_exp, normalize, name)
         return softmax
 
 

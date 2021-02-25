@@ -4,14 +4,13 @@ import time
 from datetime import datetime
 
 import cv2
-import detect_and_align
 import numpy as np
 import tensorflow as tf
 from scipy import misc
 from sklearn.metrics.pairwise import pairwise_distances
+from tensorflow.python.platform import gfile
 
-tf = tf.compat.v1
-tf.disable_v2_behavior()
+import detect_and_align
 
 
 class IdData:
@@ -84,7 +83,7 @@ def load_model(model):
     model_exp = os.path.expanduser(model)
     if os.path.isfile(model_exp):
         print('Loading model filename: %s' % model_exp)
-        with tf.gfile.GFile(model_exp, 'rb') as f:
+        with gfile.FastGFile(model_exp, 'rb') as f:
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
             tf.import_graph_def(graph_def, name='')
@@ -92,7 +91,7 @@ def load_model(model):
         raise ValueError('Specify model file, not directory!')
 
 
-def main(args, channel=0):
+def main(args):
     with tf.Graph().as_default():
         with tf.Session() as sess:
 
@@ -107,17 +106,18 @@ def main(args, channel=0):
             id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder, phase_train_placeholder,
                              args.threshold)
 
-            cap = cv2.VideoCapture(channel)
+            cap = cv2.VideoCapture(0)
             frame_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
             show_landmarks = False
-            show_bb = False
+            show_bb = True
             show_id = True
             show_fps = False
             while 1:
                 start = time.time()
                 _, frame = cap.read()
 
+                # Locate faces and landmarks in frame
                 face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame, mtcnn)
 
                 if len(face_patches) > 0:
@@ -125,6 +125,7 @@ def main(args, channel=0):
                     feed_dict = {images_placeholder: face_patches, phase_train_placeholder: False}
                     embs = sess.run(embeddings, feed_dict=feed_dict)
 
+                    print('Matches in frame:')
                     matching_ids, matching_distances = id_data.find_matching_ids(embs)
 
                     for bb, landmark, matching_id, dist in zip(padded_bounding_boxes, landmarks, matching_ids,
@@ -133,7 +134,9 @@ def main(args, channel=0):
                             matching_id = 'Unknown'
                             print('Unknown! Couldn\'t fint match.')
                             warna = (0, 0, 255)
-                            cv2.imwrite('unknown/{}.jpeg'.format(datetime.now().strftime('%d%m%Y_%H%M%S')), frame)
+                            return_value, image = cap.read()
+                            cv2.imwrite('unknown/{}.jpeg'.format(datetime.now().strftime('%H%M%S')), image)
+                            print('Saving image')
                         else:
                             print('Hi %s! Distance: %1.4f' % (matching_id, dist))
                             warna = (55, 255, 0)
@@ -160,29 +163,17 @@ def main(args, channel=0):
                     font = cv2.FONT_HERSHEY_SIMPLEX
                     cv2.putText(frame, str(fps), (0, int(frame_height) - 5), font, 1, (255, 255, 255), 1, cv2.LINE_AA)
 
-                cv2.imshow("INFRA", frame)
+                cv2.imshow('frame', frame)
 
                 key = cv2.waitKey(1)
                 if key == ord('q'):
                     break
-                elif key == ord('0'):
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    main(args)
-                elif key == ord('4'):
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    main(args, "rtsp://admin:m0n0w4ll@192.168.5.10:554/cam/realmonitor?channel=4&subtype=0")
-                elif key == ord('3'):
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    main(args, "rtsp://admin:m0n0w4ll@192.168.5.10:554/cam/realmonitor?channel=3&subtype=0")
                 elif key == ord('l'):
-                    show_landmarks = not show_landmarks  # titik
+                    show_landmarks = not show_landmarks
                 elif key == ord('b'):
-                    show_bb = not show_bb  # frame box
+                    show_bb = not show_bb
                 elif key == ord('i'):
-                    show_id = not show_id  # nama(id)
+                    show_id = not show_id
                 elif key == ord('f'):
                     show_fps = not show_fps
 
@@ -196,5 +187,4 @@ if __name__ == '__main__':
     parser.add_argument('model', type=str, help='Path to model protobuf (.pb) file')
     parser.add_argument('id_folder', type=str, nargs='+', help='Folder containing ID folders')
     parser.add_argument('-t', '--threshold', type=float, help='Distance threshold defining an id match', default=1.2)
-    camna = "rtsp://admin:m0n0w4ll@192.168.5.20:554/cam/realmonitor?channel=1&subtype=0"
     main(parser.parse_args())
