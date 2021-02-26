@@ -7,6 +7,7 @@ import numpy as np
 import tensorflow as tf
 from scipy import misc
 from sklearn.metrics.pairwise import pairwise_distances
+from sqlalchemy import create_engine
 
 import detect_and_align
 
@@ -18,7 +19,7 @@ class IdData:
 
     def __init__(self, id_folder, mtcnn, sess, embeddings, images_placeholder,
                  phase_train_placeholder, distance_treshold):
-        print('Loading known identities: ', end='')
+        print('Loading known identities: ')
         self.distance_treshold = distance_treshold
         self.id_folder = id_folder
         self.mtcnn = mtcnn
@@ -92,12 +93,13 @@ def load_model(model):
         raise ValueError('Specify model file, not directory!')
 
 
+db = create_engine('postgresql://backend:m0n0w4ll@localhost/tims', strategy='threadlocal')
+
+
 def main(args, channel=0):
     with tf.Graph().as_default():
         with tf.Session() as sess:
-
             mtcnn = detect_and_align.create_mtcnn(sess, None)
-
             load_model(args.model)
             images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
             embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
@@ -106,7 +108,6 @@ def main(args, channel=0):
             # Load anchor IDs
             id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder, phase_train_placeholder,
                              args.threshold)
-
             cap = cv2.VideoCapture(channel)
 
             while 1:
@@ -121,14 +122,46 @@ def main(args, channel=0):
 
                     matching_ids, matching_distances = id_data.find_matching_ids(embs)
 
-                    for bb, landmark, matching_id, dist in zip(padded_bounding_boxes, landmarks, matching_ids,
-                                                               matching_distances):
+                    for bb, landmark, matching_id, dist in zip(
+                            padded_bounding_boxes, landmarks, matching_ids, matching_distances):
                         if matching_id is None:
+                            f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
                             print('Unknown! Couldn\'t fint match.', end='\r')
-                            cv2.imwrite('unknown/{}.jpeg'.format(datetime.now().strftime('%d%m%Y_%H%M%S')),
-                                        frame)
+                            cv2.imwrite('unknown/{}'.format(f_name), frame)
+                            db.begin()
+                            conn = db.connect()
+                            try:
+                                db.execute(
+                                    "insert into log_unknown values (DEFAULT, '{}', 'b019831bd838490bbe6765b66402bebd', DEFAULT)"
+                                        .format(f_name)
+                                )
+                                db.commit()
+                                print("Succesfully save {} data".format(f_name))
+                            except Exception as e:
+                                print(e)
+                                db.rollback()
+                                print("Failed to save")
+                            finally:
+                                conn.close()
                         else:
                             print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
+                            db.begin()
+                            conn = db.connect()
+                            try:
+                                data = db.execute("select * from users where name = '{}'".format(matching_id))
+                                idna = [x.id for x in data][0]
+                                db.execute(
+                                    "insert into log_person_counter values (DEFAULT, '{}', 'b019831bd838490bbe6765b66402bebd', DEFAULT)"
+                                        .format(idna)
+                                )
+                                db.commit()
+                                print("Succesfully save {} data".format(f_name))
+                            except Exception as e:
+                                print(e)
+                                db.rollback()
+                                print("Failed to save")
+                            finally:
+                                conn.close()
                 else:
                     print('Couldn\'t find a face', end='\r')
 
@@ -147,4 +180,4 @@ if __name__ == '__main__':
     parser.add_argument('id_folder', type=str, nargs='+', help='Folder containing ID folders')
     parser.add_argument('-t', '--threshold', type=float, help='Distance threshold defining an id match', default=1.2)
     camna = "rtsp://admin:m0n0w4ll@192.168.5.11:554/cam/realmonitor?channel=1&subtype=0"
-    main(parser.parse_args(), camna)
+    main(parser.parse_args())
