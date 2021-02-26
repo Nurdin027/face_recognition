@@ -124,13 +124,13 @@ def main(args, channel=0):
                     for bb, landmark, matching_id, dist in zip(padded_bounding_boxes, landmarks, matching_ids,
                                                                matching_distances):
                         if matching_id is None:
-                            print('Unknown! Couldn\'t fint match.')
-                            cv2.imwrite('unknown/unknown/{}.jpeg'.format(datetime.now().strftime('%d%m%Y_%H%M%S')),
+                            print('Unknown! Couldn\'t fint match.', end='\r')
+                            cv2.imwrite('unknown/{}.jpeg'.format(datetime.now().strftime('%d%m%Y_%H%M%S')),
                                         frame)
                         else:
-                            print('Hi %s! Distance: %1.4f' % (matching_id, dist))
+                            print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
                 else:
-                    print('Couldn\'t find a face')
+                    print('Couldn\'t find a face', end='\r')
 
                 key = cv2.waitKey(1)
                 if key == ord('q'):
