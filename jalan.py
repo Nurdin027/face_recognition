@@ -150,12 +150,17 @@ def main(args, channel=0):
                             try:
                                 data = db.execute("select * from users where name = '{}'".format(matching_id))
                                 idna = [x.id for x in data][0]
-                                db.execute(
-                                    "insert into log_person_counter values (DEFAULT, '{}', 'b019831bd838490bbe6765b66402bebd', DEFAULT)"
-                                        .format(idna)
-                                )
-                                db.commit()
-                                print("Succesfully save {} data".format(f_name))
+                                ada = db.execute(
+                                    "select * from log_person_counter where user_id = '{}' order by add_time desc limit 1"
+                                        .format(idna))
+                                last = [x.add_time for x in ada][0].date()
+                                now = datetime.now().date()
+                                if now > last:
+                                    db.execute(
+                                        "insert into log_person_counter values (DEFAULT, '{}', 'b019831bd838490bbe6765b66402bebd', DEFAULT)"
+                                            .format(idna)
+                                    )
+                                    db.commit()
                             except Exception as e:
                                 print(e)
                                 db.rollback()
