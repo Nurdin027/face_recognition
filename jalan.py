@@ -7,12 +7,18 @@ import numpy as np
 import tensorflow as tf
 from scipy import misc
 from sklearn.metrics.pairwise import pairwise_distances
-from sqlalchemy import create_engine
 
 import detect_and_align
+from base import Session
+from models.log_person_counter import LogPersonCounterM
+from models.log_unknown import LogUnknownM
+from models.sub_device import SubDeviceM
+from models.users import UserM
 
 tf = tf.compat.v1
 tf.disable_v2_behavior()
+
+session = Session()
 
 
 class IdData:
@@ -93,10 +99,17 @@ def load_model(model):
         raise ValueError('Specify model file, not directory!')
 
 
-db = create_engine('postgresql://backend:m0n0w4ll@localhost/tims', strategy='threadlocal')
+def cek_stat(idna):
+    subna = session.query(SubDeviceM).filter_by(id=idna).first()
+    print(subna.detect_stat)
+    return subna.detect_stat
 
 
-def main(args, channel=0):
+def main(args, data_cam):
+    channel = "rtsp://{}:554/cam/realmonitor?channel={}&subtype=0".format(
+        data_cam['host'], data_cam['channel']
+    )
+    cam_id = data_cam['id']
     with tf.Graph().as_default():
         with tf.Session() as sess:
             mtcnn = detect_and_align.create_mtcnn(sess, None)
@@ -110,7 +123,7 @@ def main(args, channel=0):
                              args.threshold)
             cap = cv2.VideoCapture(channel)
 
-            while 1:
+            while cek_stat(cam_id):
                 _, frame = cap.read()
 
                 face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame, mtcnn)
@@ -127,46 +140,36 @@ def main(args, channel=0):
                         if matching_id is None:
                             f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
                             print('Unknown! Couldn\'t fint match.', end='\r')
-                            cv2.imwrite('unknown/{}'.format(f_name), frame)
-                            db.begin()
-                            conn = db.connect()
+                            if not os.path.exists('../api/_api/static/unknown/{}'.format(cam_id)):
+                                os.makedirs('../api/_api/static/unknown/{}'.format(cam_id))
+                            cv2.imwrite('../api/_api/static/unknown/{}/{}'.format(cam_id, f_name), frame)
                             try:
-                                db.execute(
-                                    "insert into log_unknown values (DEFAULT, '{}', 'b019831bd838490bbe6765b66402bebd', DEFAULT)"
-                                        .format(f_name)
-                                )
-                                db.commit()
+                                session.add(LogUnknownM(f_name, cam_id))
+                                session.commit()
                                 print("Succesfully save {} data".format(f_name))
                             except Exception as e:
                                 print(e)
-                                db.rollback()
+                                session.rollback()
                                 print("Failed to save")
                             finally:
-                                conn.close()
+                                session.close()
                         else:
                             print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
-                            db.begin()
-                            conn = db.connect()
+
                             try:
-                                data = db.execute("select * from users where name = '{}'".format(matching_id))
-                                idna = [x.id for x in data][0]
-                                ada = db.execute(
-                                    "select * from log_person_counter where user_id = '{}' order by add_time desc limit 1"
-                                        .format(idna))
-                                last = [x.add_time for x in ada][0].date()
+                                idna = session.query(UserM).filter(name=matching_id)
+                                ada = session.query(LogPersonCounterM).filter_by(user_id=idna).first()
+                                last = ada.add_time.date()
                                 now = datetime.now().date()
                                 if now > last:
-                                    db.execute(
-                                        "insert into log_person_counter values (DEFAULT, '{}', 'b019831bd838490bbe6765b66402bebd', DEFAULT)"
-                                            .format(idna)
-                                    )
-                                    db.commit()
+                                    session.add(LogPersonCounterM(idna, cam_id))
+                                    session.commit()
                             except Exception as e:
                                 print(e)
-                                db.rollback()
+                                session.rollback()
                                 print("Failed to save")
                             finally:
-                                conn.close()
+                                session.close()
                 else:
                     print('Couldn\'t find a face', end='\r')
 
@@ -185,4 +188,8 @@ if __name__ == '__main__':
     parser.add_argument('id_folder', type=str, nargs='+', help='Folder containing ID folders')
     parser.add_argument('-t', '--threshold', type=float, help='Distance threshold defining an id match', default=1.2)
     camna = "rtsp://admin:m0n0w4ll@192.168.5.11:554/cam/realmonitor?channel=1&subtype=0"
-    main(parser.parse_args())
+
+    list_camera = session.query(SubDeviceM).all()
+    for kam in list_camera:
+        isi = kam.json()
+        main(parser.parse_args(), isi)
