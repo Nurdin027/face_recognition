@@ -1,6 +1,7 @@
 import argparse
 import os
 from datetime import datetime
+from multiprocessing import Process
 
 import cv2
 import numpy as np
@@ -192,4 +193,6 @@ if __name__ == '__main__':
     list_camera = session.query(SubDeviceM).all()
     for kam in list_camera:
         isi = kam.json()
-        main(parser.parse_args(), isi)
+        Process(target=main(parser.parse_args(), isi))
+        # main(parser.parse_args(), isi)
+
