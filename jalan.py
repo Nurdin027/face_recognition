@@ -102,14 +102,12 @@ def load_model(model):
 
 def cek_stat(idna):
     subna = session.query(SubDeviceM).filter_by(id=idna).first()
-    print(subna.detect_stat)
+    # print(subna.id, subna.detect_stat)
     return subna.detect_stat
 
 
 def main(args, data_cam):
-    channel = "rtsp://{}:554/cam/realmonitor?channel={}&subtype=0".format(
-        data_cam['host'], data_cam['channel']
-    )
+    channel = "rtsp://{}:554/cam/realmonitor?channel={}&subtype=0".format(data_cam['host'], data_cam['channel'])
     cam_id = data_cam['id']
     with tf.Graph().as_default():
         with tf.Session() as sess:
@@ -120,63 +118,68 @@ def main(args, data_cam):
             phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
             # Load anchor IDs
-            id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder, phase_train_placeholder,
+            id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder,
+                             phase_train_placeholder,
                              args.threshold)
             cap = cv2.VideoCapture(channel)
+            if cap is None or not cap.isOpened():
+                print('Warning: unable to open video source: ', channel)
+            print("")
+            while 1:
+                cek = cek_stat(cam_id)
+                print(cam_id, "checking")
+                if cek:
+                    print("checked")
+                    _, frame = cap.read()
+                    face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame, mtcnn)
+                    if len(face_patches) > 0:
+                        face_patches = np.stack(face_patches)
+                        feed_dict = {images_placeholder: face_patches, phase_train_placeholder: False}
+                        embs = sess.run(embeddings, feed_dict=feed_dict)
 
-            while cek_stat(cam_id):
-                _, frame = cap.read()
+                        matching_ids, matching_distances = id_data.find_matching_ids(embs)
 
-                face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame, mtcnn)
-
-                if len(face_patches) > 0:
-                    face_patches = np.stack(face_patches)
-                    feed_dict = {images_placeholder: face_patches, phase_train_placeholder: False}
-                    embs = sess.run(embeddings, feed_dict=feed_dict)
-
-                    matching_ids, matching_distances = id_data.find_matching_ids(embs)
-
-                    for bb, landmark, matching_id, dist in zip(
-                            padded_bounding_boxes, landmarks, matching_ids, matching_distances):
-                        if matching_id is None:
-                            f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
-                            print('Unknown! Couldn\'t fint match.', end='\r')
-                            if not os.path.exists('../api/_api/static/unknown/{}'.format(cam_id)):
-                                os.makedirs('../api/_api/static/unknown/{}'.format(cam_id))
-                            cv2.imwrite('../api/_api/static/unknown/{}/{}'.format(cam_id, f_name), frame)
-                            try:
-                                session.add(LogUnknownM(f_name, cam_id))
-                                session.commit()
-                                print("Succesfully save {} data".format(f_name))
-                            except Exception as e:
-                                print(e)
-                                session.rollback()
-                                print("Failed to save")
-                            finally:
-                                session.close()
-                        else:
-                            print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
-
-                            try:
-                                idna = session.query(UserM).filter(name=matching_id)
-                                ada = session.query(LogPersonCounterM).filter_by(user_id=idna).first()
-                                last = ada.add_time.date()
-                                now = datetime.now().date()
-                                if now > last:
-                                    session.add(LogPersonCounterM(idna, cam_id))
+                        for bb, landmark, matching_id, dist in zip(
+                                padded_bounding_boxes, landmarks, matching_ids, matching_distances):
+                            if matching_id is None:
+                                f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
+                                print('Unknown! Couldn\'t fint match.', end='\r')
+                                if not os.path.exists('../api/_api/static/unknown/{}'.format(cam_id)):
+                                    os.makedirs('../api/_api/static/unknown/{}'.format(cam_id))
+                                cv2.imwrite('../api/_api/static/unknown/{}/{}'.format(cam_id, f_name), frame)
+                                try:
+                                    session.add(LogUnknownM(f_name, cam_id))
                                     session.commit()
-                            except Exception as e:
-                                print(e)
-                                session.rollback()
-                                print("Failed to save")
-                            finally:
-                                session.close()
-                else:
-                    print('Couldn\'t find a face', end='\r')
+                                    print("Succesfully save {} data".format(f_name))
+                                except Exception as e:
+                                    print(e)
+                                    session.rollback()
+                                    print("Failed to save")
+                                finally:
+                                    session.close()
+                            else:
+                                print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
 
-                key = cv2.waitKey(1)
-                if key == ord('q'):
-                    break
+                                try:
+                                    idna = session.query(UserM).filter_by(name=matching_id)
+                                    ada = session.query(LogPersonCounterM).filter_by(user_id=idna).first()
+                                    last = ada.add_time.date()
+                                    now = datetime.now().date()
+                                    if now > last:
+                                        session.add(LogPersonCounterM(idna, cam_id))
+                                        session.commit()
+                                except Exception as e:
+                                    print(e)
+                                    session.rollback()
+                                    print("Failed to save")
+                                finally:
+                                    session.close()
+                    else:
+                        print('Couldn\'t find a face', end='\r')
+
+                    key = cv2.waitKey(1)
+                    if key == ord('q'):
+                        break
 
             cap.release()
             cv2.destroyAllWindows()
@@ -188,11 +191,8 @@ if __name__ == '__main__':
     parser.add_argument('model', type=str, help='Path to model protobuf (.pb) file')
     parser.add_argument('id_folder', type=str, nargs='+', help='Folder containing ID folders')
     parser.add_argument('-t', '--threshold', type=float, help='Distance threshold defining an id match', default=1.2)
-    camna = "rtsp://admin:m0n0w4ll@192.168.5.11:554/cam/realmonitor?channel=1&subtype=0"
 
     list_camera = session.query(SubDeviceM).all()
     for kam in list_camera:
         isi = kam.json()
-        Process(target=main(parser.parse_args(), isi))
-        # main(parser.parse_args(), isi)
-
+        Process(target=main, args=(parser.parse_args(), isi)).start()
