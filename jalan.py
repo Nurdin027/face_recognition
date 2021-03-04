@@ -2,6 +2,7 @@ import argparse
 import os
 from datetime import datetime
 from multiprocessing import Process
+from time import sleep
 
 import cv2
 import numpy as np
@@ -66,7 +67,7 @@ class IdData:
     def print_distance_table(self, id_image_paths):
         distance_matrix = pairwise_distances(self.embeddings, self.embeddings)
         image_names = [path.split('/')[-1] for path in id_image_paths]
-        print('Distance matrix:\n{:20}'.format(''), end='')
+        print('Distance matrix:\n{:20}'.format(''))
         [print('{:20}'.format(name), end='') for name in image_names]
         for path, distance_row in zip(image_names, distance_matrix):
             print('\n{:20}'.format(path), end='')
@@ -100,89 +101,88 @@ def load_model(model):
         raise ValueError('Specify model file, not directory!')
 
 
-def cek_stat(idna):
+def cek_stat(idna, delay=0):
     subna = session.query(SubDeviceM).filter_by(id=idna).first()
     # print(subna.id, subna.detect_stat)
+    sleep(delay)
     return subna.detect_stat
 
 
 def main(args, data_cam):
     channel = "rtsp://{}:554/cam/realmonitor?channel={}&subtype=0".format(data_cam['host'], data_cam['channel'])
     cam_id = data_cam['id']
-    with tf.Graph().as_default():
-        with tf.Session() as sess:
-            mtcnn = detect_and_align.create_mtcnn(sess, None)
-            load_model(args.model)
-            images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
-            embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
-            phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
-
-            # Load anchor IDs
-            id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder,
-                             phase_train_placeholder,
-                             args.threshold)
-            cap = cv2.VideoCapture(channel)
-            if cap is None or not cap.isOpened():
-                print('Warning: unable to open video source: ', channel)
-            print("")
-            while 1:
-                cek = cek_stat(cam_id)
-                print(cam_id, "checking")
-                if cek:
-                    print("checked")
-                    _, frame = cap.read()
-                    face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame, mtcnn)
-                    if len(face_patches) > 0:
-                        face_patches = np.stack(face_patches)
-                        feed_dict = {images_placeholder: face_patches, phase_train_placeholder: False}
-                        embs = sess.run(embeddings, feed_dict=feed_dict)
-
-                        matching_ids, matching_distances = id_data.find_matching_ids(embs)
-
-                        for bb, landmark, matching_id, dist in zip(
-                                padded_bounding_boxes, landmarks, matching_ids, matching_distances):
-                            if matching_id is None:
-                                f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
-                                print('Unknown! Couldn\'t fint match.', end='\r')
-                                if not os.path.exists('../api/_api/static/unknown/{}'.format(cam_id)):
-                                    os.makedirs('../api/_api/static/unknown/{}'.format(cam_id))
-                                cv2.imwrite('../api/_api/static/unknown/{}/{}'.format(cam_id, f_name), frame)
-                                try:
-                                    session.add(LogUnknownM(f_name, cam_id))
-                                    session.commit()
-                                    print("Succesfully save {} data".format(f_name))
-                                except Exception as e:
-                                    print(e)
-                                    session.rollback()
-                                    print("Failed to save")
-                                finally:
-                                    session.close()
-                            else:
-                                print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
-
-                                try:
-                                    idna = session.query(UserM).filter_by(name=matching_id)
-                                    ada = session.query(LogPersonCounterM).filter_by(user_id=idna).first()
-                                    last = ada.add_time.date()
-                                    now = datetime.now().date()
-                                    if now > last:
-                                        session.add(LogPersonCounterM(idna, cam_id))
-                                        session.commit()
-                                except Exception as e:
-                                    print(e)
-                                    session.rollback()
-                                    print("Failed to save")
-                                finally:
-                                    session.close()
+    while 1:
+        if cek_stat(cam_id, 15):
+            with tf.Graph().as_default():
+                with tf.Session() as sess:
+                    cap = cv2.VideoCapture(channel)
+                    if cap is None or not cap.isOpened():
+                        print("")
+                        print('Warning: unable to open video source: ', channel)
                     else:
-                        print('Couldn\'t find a face', end='\r')
+                        mtcnn = detect_and_align.create_mtcnn(sess, None)
+                        load_model(args.model)
+                        images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
+                        embeddings = tf.get_default_graph().get_tensor_by_name("embeddings:0")
+                        phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
 
-                    key = cv2.waitKey(1)
-                    if key == ord('q'):
-                        break
+                        # Load anchor IDs
+                        id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder,
+                                         phase_train_placeholder,
+                                         args.threshold)
+                        while 1:
+                            cek = cek_stat(cam_id)
+                            # print(cam_id, "checking")
+                            if cek:
+                                # print("checked")
+                                _, frame = cap.read()
+                                face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame,
+                                                                                                               mtcnn)
+                                if len(face_patches) > 0:
+                                    face_patches = np.stack(face_patches)
+                                    feed_dict = {images_placeholder: face_patches, phase_train_placeholder: False}
+                                    embs = sess.run(embeddings, feed_dict=feed_dict)
 
-            cap.release()
-            cv2.destroyAllWindows()
+                                    matching_ids, matching_distances = id_data.find_matching_ids(embs)
+
+                                    for bb, landmark, matching_id, dist in zip(
+                                            padded_bounding_boxes, landmarks, matching_ids, matching_distances):
+                                        if matching_id is None:
+                                            f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
+                                            print('Unknown! Couldn\'t fint match.', end='\r')
+                                            if not os.path.exists('../api/_api/static/unknown/{}'.format(cam_id)):
+                                                os.makedirs('../api/_api/static/unknown/{}'.format(cam_id))
+                                            cv2.imwrite('../api/_api/static/unknown/{}/{}'.format(cam_id, f_name),
+                                                        frame)
+                                            try:
+                                                session.add(LogUnknownM(f_name, cam_id))
+                                                session.commit()
+                                                print("Succesfully save {} data".format(f_name))
+                                            except Exception as e:
+                                                print(e)
+                                                session.rollback()
+                                                print("Failed to save")
+                                            finally:
+                                                session.close()
+                                        else:
+                                            print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
+
+                                            try:
+                                                idna = session.query(UserM).filter_by(name=matching_id)
+                                                ada = session.query(LogPersonCounterM).filter_by(user_id=idna).first()
+                                                last = ada.add_time.date()
+                                                now = datetime.now().date()
+                                                if now > last:
+                                                    session.add(LogPersonCounterM(idna, cam_id))
+                                                    session.commit()
+                                            except Exception as e:
+                                                print(e)
+                                                session.rollback()
+                                                print("Failed to save")
+                                            finally:
+                                                session.close()
+                                else:
+                                    print('Couldn\'t find a face')
 
 
 if __name__ == '__main__':
