@@ -18,7 +18,7 @@ class GuestM(Base):
     add_time = Column(DateTime, default=datetime.now())
 
     sub_division_id = Column(String, ForeignKey(SubDeviceM.id))
-    sub_division = relationship()
+    sub_division = relationship(SubDeviceM, foreign_keys=sub_division_id)
 
     # endregion
 
