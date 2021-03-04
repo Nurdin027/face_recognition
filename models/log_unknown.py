@@ -27,7 +27,7 @@ class LogUnknownM(Base):
             "id": self.id,
             "photo": self.photo,
             "sub_device_id": self.sub_device_id,
-            "sub_device_name": self.sub_device.desc,
+            "sub_device_name": self.sub_device.description,
             "main_device_name": self.sub_device.main_device.name,
             "add_time": str(self.add_time),
         }

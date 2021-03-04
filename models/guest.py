@@ -17,26 +17,26 @@ class GuestM(Base):
     filename = Column(String)
     add_time = Column(DateTime, default=datetime.now())
 
-    sub_division_id = Column(String, ForeignKey(SubDeviceM.id))
-    sub_division = relationship(SubDeviceM, foreign_keys=sub_division_id)
+    sub_device_id = Column(String, ForeignKey(SubDeviceM.id))
+    sub_device = relationship(SubDeviceM, foreign_keys=sub_device_id)
 
     # endregion
 
     def __init__(self,
                  name,
                  filename,
-                 sub_division_id,
+                 sub_device_id,
                  ):
         self.name = name
         self.filename = filename
-        self.sub_division_id = sub_division_id
+        self.sub_device_id = sub_device_id
 
     def json(self):
         return {
             "id": self.id,
             "name": self.name,
             "filename": self.filename,
-            "sub_division_id": self.sub_division_id,
-            "sub_division": self.sub_division.name,
+            "sub_device_id": self.sub_device_id,
+            "sub_device": self.sub_device.description,
             "add_time": self.add_time,
         }
