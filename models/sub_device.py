@@ -1,10 +1,9 @@
 import uuid
 
-from sqlalchemy import Column, Integer, String, ForeignKey
-from sqlalchemy.orm import relationship
-
 from base import Base
 from models.main_device import MainDeviceM
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
 
 
 class SubDeviceM(Base):

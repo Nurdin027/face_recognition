@@ -185,5 +185,5 @@ if __name__ == '__main__':
     parser.add_argument('model', type=str, help='Path to model protobuf (.pb) file')
     parser.add_argument('id_folder', type=str, nargs='+', help='Folder containing ID folders')
     parser.add_argument('-t', '--threshold', type=float, help='Distance threshold defining an id match', default=1.2)
-    camna = "rtsp://admin:m0n0w4ll@192.168.5.11:554/cam/realmonitor?channel=1&subtype=0"
+    camna = "rtsp://admin:m0n0w4ll@192.168.5.10:554/cam/realmonitor?channel=1&subtype=0"
     main(parser.parse_args(), camna)

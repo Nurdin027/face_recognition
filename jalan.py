@@ -2,25 +2,27 @@ import argparse
 import os
 from datetime import datetime
 from multiprocessing import Process
+from threading import Thread
 from time import sleep
 
 import cv2
+import detect_and_align
 import numpy as np
 import tensorflow as tf
-from scipy import misc
-from sklearn.metrics.pairwise import pairwise_distances
-
-import detect_and_align
-from base import Session
+from base import engine
 from models.log_person_counter import LogPersonCounterM
 from models.log_unknown import LogUnknownM
 from models.sub_device import SubDeviceM
 from models.users import UserM
+from scipy import misc
+from sklearn.metrics.pairwise import pairwise_distances
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 tf = tf.compat.v1
 tf.disable_v2_behavior()
 
-session = Session()
+Session = sessionmaker(bind=engine)
 
 
 class IdData:
@@ -102,17 +104,23 @@ def load_model(model):
 
 
 def cek_stat(idna, delay=0):
-    subna = session.query(SubDeviceM).filter_by(id=idna).first()
+    sess = Session()
+    sess.connection()
+    subna = sess.query(SubDeviceM).filter_by(id=idna).first()
     # print(subna.id, subna.detect_stat)
+    sess.close()
     sleep(delay)
-    return subna.detect_stat
+    return subna
 
 
 def main(args, data_cam):
     channel = "rtsp://{}:554/cam/realmonitor?channel={}&subtype=0".format(data_cam['host'], data_cam['channel'])
     cam_id = data_cam['id']
     while 1:
-        if cek_stat(cam_id, 15):
+        stat = cek_stat(cam_id, 5)
+        print(1)
+        if stat.detect_stat:
+            print(2)
             with tf.Graph().as_default():
                 with tf.Session() as sess:
                     cap = cv2.VideoCapture(channel)
@@ -128,13 +136,10 @@ def main(args, data_cam):
 
                         # Load anchor IDs
                         id_data = IdData(args.id_folder[0], mtcnn, sess, embeddings, images_placeholder,
-                                         phase_train_placeholder,
-                                         args.threshold)
+                                         phase_train_placeholder, args.threshold)
                         while 1:
                             cek = cek_stat(cam_id)
-                            # print(cam_id, "checking")
-                            if cek:
-                                # print("checked")
+                            if cek.detect_stat:
                                 _, frame = cap.read()
                                 face_patches, padded_bounding_boxes, landmarks = detect_and_align.detect_faces(frame,
                                                                                                                mtcnn)
@@ -148,39 +153,47 @@ def main(args, data_cam):
                                     for bb, landmark, matching_id, dist in zip(
                                             padded_bounding_boxes, landmarks, matching_ids, matching_distances):
                                         if matching_id is None:
-                                            f_name = datetime.now().strftime('%d%m%Y_%H%M%S_%f') + ".jpeg"
-                                            print('Unknown! Couldn\'t fint match.', end='\r')
+                                            name = datetime.now().strftime('%d%m%Y_%H%M%S_%f')
+                                            f_name = name + ".jpeg"
+                                            print('Unknown! Couldn\'t fint match.')
                                             if not os.path.exists('../api/_api/static/unknown/{}'.format(cam_id)):
                                                 os.makedirs('../api/_api/static/unknown/{}'.format(cam_id))
                                             cv2.imwrite('../api/_api/static/unknown/{}/{}'.format(cam_id, f_name),
                                                         frame)
+                                            session_unknown = Session()
+                                            session_unknown.connection()
                                             try:
-                                                session.add(LogUnknownM(f_name, cam_id))
-                                                session.commit()
+                                                session_unknown.add(LogUnknownM(f_name, cam_id))
+                                                session_unknown.commit()
                                                 print("Succesfully save {} data".format(f_name))
                                             except Exception as e:
                                                 print(e)
-                                                session.rollback()
+                                                session_unknown.rollback()
                                                 print("Failed to save")
                                             finally:
-                                                session.close()
+                                                session_unknown.close()
                                         else:
                                             print('Hi %s! Distance: %1.4f' % (matching_id, dist), end='\r')
-
+                                            session_known = Session()
+                                            session_known.connection()
                                             try:
-                                                idna = session.query(UserM).filter_by(name=matching_id)
-                                                ada = session.query(LogPersonCounterM).filter_by(user_id=idna).first()
+                                                idna = session_known.query(UserM).filter_by(name=matching_id).first()
+                                                print(idna).json()
+                                                ada = session_known.query(LogPersonCounterM).filter_by(
+                                                    user_id=idna).first()
+                                                print(ada.json())
                                                 last = ada.add_time.date()
                                                 now = datetime.now().date()
+                                                print(last, now)
                                                 if now > last:
-                                                    session.add(LogPersonCounterM(idna, cam_id))
-                                                    session.commit()
+                                                    session_known.add(LogPersonCounterM(idna, cam_id))
+                                                    session_known.commit()
                                             except Exception as e:
                                                 print(e)
-                                                session.rollback()
+                                                session_known.rollback()
                                                 print("Failed to save")
                                             finally:
-                                                session.close()
+                                                session_known.close()
                                 else:
                                     print('Couldn\'t find a face')
 
@@ -192,7 +205,10 @@ if __name__ == '__main__':
     parser.add_argument('id_folder', type=str, nargs='+', help='Folder containing ID folders')
     parser.add_argument('-t', '--threshold', type=float, help='Distance threshold defining an id match', default=1.2)
 
+    session = Session()
+
     list_camera = session.query(SubDeviceM).all()
+
     for kam in list_camera:
         isi = kam.json()
         Process(target=main, args=(parser.parse_args(), isi)).start()
